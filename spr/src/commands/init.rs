@@ -185,7 +185,12 @@ pub async fn init() -> Result<()> {
     let branch_prefix = dialoguer::Input::<String>::new()
         .with_prompt("Branch prefix")
         .with_initial_text(branch_prefix)
+        .validate_with(|input: &String| -> Result<()> {validate_branch_prefix(input)})
         .interact_text()?;
+    
+    // Abort when prefix is invalid. But could also do the "endless loop until you get it right" thing.
+    validate_branch_prefix(&branch_prefix)?;
+
     config.set_str("spr.branchPrefix", &branch_prefix)?;
 
     Ok(())
@@ -201,20 +206,26 @@ fn validate_branch_prefix(branch_prefix: &str) -> Result<()> {
     }
 
     if branch_prefix.contains("..") {
-        return Err(Error::new("Branch prefix cannot contain two consecutive dots anywhere."));
+        return Err(Error::new(
+            "Branch prefix cannot contain two consecutive dots anywhere.",
+        ));
     }
 
     if branch_prefix.chars().any(|c| c.is_ascii_control()) {
-        return Err(Error::new("Branch prefix cannot contain ASCII control sequence"))
+        return Err(Error::new(
+            "Branch prefix cannot contain ASCII control sequence",
+        ));
     }
-    
+
     let forbidden_chars_re = regex!(r"[ \~\^:?*\[\\]");
     if forbidden_chars_re.is_match(branch_prefix) {
-        return Err(Error::new("Branch prefix contains one or more forbidden characters."));
+        return Err(Error::new(
+            "Branch prefix contains one or more forbidden characters.",
+        ));
     }
 
     if branch_prefix.contains("//") || branch_prefix.starts_with('/') {
-        return Err(Error::new("Branch prefix contains multiple consecutive slashes or starts with slash."))
+        return Err(Error::new("Branch prefix contains multiple consecutive slashes or starts with slash."));
     }
 
     if branch_prefix.contains("@{") {
@@ -229,36 +240,37 @@ mod tests {
     use super::validate_branch_prefix;
 
     #[test]
-    fn test_branch_prefix_validation() {
-        // for now this is me hacking around
-        // first, how is branchPrefix even used?
-        // let mut branch_name = format!("{branch_prefix}{slug}-{suffix}");
-        // and slug is the title (with proper - and _ and no forbidden symbols)
-        // let ref_local = format!("refs/remotes/{remote_name}/{branch_name}");
-        // So basically we must check that the prefix creates a valid branch name.
-    }
-
-    #[test]
     fn test_branch_prefix_rules() {
         // Rules taken from https://git-scm.com/docs/git-check-ref-format
-        // Note: Some rules don't need to be checked because the prefix is 
-        // always embedded into a larger context. For example, rule 9 in the 
+        // Note: Some rules don't need to be checked because the prefix is
+        // always embedded into a larger context. For example, rule 9 in the
         // reference states that a _refname_ cannot be the single character @.
         // This rule is impossible to break purely via the branch prefix.
-        let bad_prefixes: Vec<(&str, &str)> = vec![(
-            "spr/.bad",
-            "Cannot start slash-separated component with dot",
-        ),
-        ("spr/bad.lock", "Cannot end with .lock"),
-        ("spr/bad.lock/some_more", "Cannot end slash-separated component with .lock"),
-        ("spr/b..ad/bla", "They cannot contain two consecutive dots anywhere"),
-        ("spr/bad//bla", "They cannot contain consecutive slashes"),
-        ("/bad", "Prefix should not start with slash"),
-        ("/bad@{stuff", "Prefix cannot contain sequence @{"),
+        let bad_prefixes: Vec<(&str, &str)> = vec![
+            (
+                "spr/.bad",
+                "Cannot start slash-separated component with dot",
+            ),
+            ("spr/bad.lock", "Cannot end with .lock"),
+            (
+                "spr/bad.lock/some_more",
+                "Cannot end slash-separated component with .lock",
+            ),
+            (
+                "spr/b..ad/bla",
+                "They cannot contain two consecutive dots anywhere",
+            ),
+            ("spr/bad//bla", "They cannot contain consecutive slashes"),
+            ("/bad", "Prefix should not start with slash"),
+            ("/bad@{stuff", "Prefix cannot contain sequence @{"),
         ];
 
         for (branch_prefix, reason) in bad_prefixes {
-            assert!(validate_branch_prefix(branch_prefix).is_err(), "{}", reason);
+            assert!(
+                validate_branch_prefix(branch_prefix).is_err(),
+                "{}",
+                reason
+            );
         }
 
         let ok_prefix = "spr/some.lockprefix/with-stuff/foo";
@@ -270,7 +282,10 @@ mod tests {
         // Here I'm mostly concerned about escaping / not escaping in the regex :p
         assert!(validate_branch_prefix("bad\x1F").is_err());
         assert!(validate_branch_prefix("notbad!").is_ok());
-        assert!(validate_branch_prefix("bad /space").is_err(), "Reject space in prefix");
+        assert!(
+            validate_branch_prefix("bad /space").is_err(),
+            "Reject space in prefix"
+        );
         assert!(validate_branch_prefix("bad~").is_err(), "Reject tilde");
         assert!(validate_branch_prefix("bad^").is_err(), "Reject caret");
         assert!(validate_branch_prefix("bad:").is_err(), "Reject colon");
