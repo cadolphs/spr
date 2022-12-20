@@ -189,3 +189,44 @@ pub async fn init() -> Result<()> {
 
     Ok(())
 }
+
+fn validate_branch_prefix(branch_prefix: &str) -> Result<()> {
+    // They can include slash / for hierarchical (directory) grouping, but no slash-separated component can begin with a dot . or end with the sequence .lock.
+    if branch_prefix.contains("/.")
+        || branch_prefix.contains(".lock/")
+        || branch_prefix.ends_with(".lock")
+    {
+        return Err(Error::new("Branch prefix cannot have slash-separated component beginning with a dot . or ending with the sequence .lock"));
+    }
+    todo!()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_branch_prefix;
+
+    #[test]
+    fn test_branch_prefix_validation() {
+        // for now this is me hacking around
+        // first, how is branchPrefix even used?
+        // let mut branch_name = format!("{branch_prefix}{slug}-{suffix}");
+        // and slug is the title (with proper - and _ and no forbidden symbols)
+        // let ref_local = format!("refs/remotes/{remote_name}/{branch_name}");
+        // So basically we must check that the prefix creates a valid branch name.
+    }
+
+    #[test]
+    fn test_branch_prefix_rules() {
+        let bad_prefixes: Vec<(&str, &str)> = vec![(
+            "spr/.bad",
+            "Cannot start slash-separated component with dot",
+        ),
+        ("spr/bad.lock", "Cannot end with .lock"),
+        ("spr/bad.lock/some_more", "Cannot end slash-separated component with .lock")
+        ];
+
+        for (branch_prefix, reason) in bad_prefixes {
+            assert!(validate_branch_prefix("spr/.bad").is_err(), "{}", reason);
+        }
+    }
+}
